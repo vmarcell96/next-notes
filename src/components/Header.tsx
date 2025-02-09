@@ -1,7 +1,9 @@
-import { HomeIcon, NotebookIcon } from "lucide-react";
+import { HomeIcon, NotebookIcon, LogOut } from "lucide-react";
 import Link from "next/link";
 import { NavButton } from "./NavButton";
 import { ModeToggle } from "./ModeToggle";
+import { LogoutLink } from "@kinde-oss/kinde-auth-nextjs/components";
+import { Button } from "./ui/button";
 
 export function Header() {
   return (
@@ -22,6 +24,19 @@ export function Header() {
         <div className="flex items-center">
           <NavButton href="/notes" label="Notes" icon={NotebookIcon} />
           <ModeToggle />
+
+          <Button
+            variant="ghost"
+            size="icon"
+            aia-label="logOut"
+            title="LogOut"
+            className="rounded-full"
+            asChild
+          >
+            <LogoutLink>
+              <LogOut />
+            </LogoutLink>
+          </Button>
         </div>
       </div>
     </header>
