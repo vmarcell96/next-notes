@@ -5,12 +5,9 @@ import { flattenValidationErrors } from "next-safe-action";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db";
-import { notes } from "@/db/schema";
+import { noteOnTags, notes, tags } from "@/db/schema";
 import { actionClient } from "@/lib/safe-action";
-import {
-    insertNoteSchema,
-    type insertNoteSchemaType,
-} from "@/zod-schemas/notes";
+import { insertNoteWithTagsSchema } from "@/zod-schemas/notes";
 
 import { getKindeServerSession } from "@kinde-oss/kinde-auth-nextjs/server";
 
@@ -19,53 +16,122 @@ import { getKindeServerSession } from "@kinde-oss/kinde-auth-nextjs/server";
 export const saveNoteAction = actionClient
     .metadata({ actionName: "saveNoteAction" })
     // revalidating the data
-    .schema(insertNoteSchema, {
+    .schema(insertNoteWithTagsSchema, {
         handleValidationErrorsShape: async (ve) =>
             flattenValidationErrors(ve).fieldErrors,
     })
-    .action(
-        async ({
-            parsedInput: Note,
-        }: {
-            parsedInput: insertNoteSchemaType;
-        }) => {
-            const { isAuthenticated } = getKindeServerSession();
-            const isAuth = await isAuthenticated();
+    .action(async (obj) => {
+        const noteWithTags = obj.parsedInput;
+        const tagLabels = noteWithTags.tagLabels;
 
-            // redirect throws an error by nature, next-safe-action disregards it , sentry doesn't
-            if (!isAuth) redirect("/login");
+        const { isAuthenticated, getUser } = getKindeServerSession();
+        const isAuth = await isAuthenticated();
+        const user = await getUser();
 
-            // throw Error("test error");
+        // redirect throws an error by nature, next-safe-action disregards it , sentry doesn't
+        if (!isAuth) redirect("/login");
 
-            // db errors are not logged in detail
-            // const query = sql.raw("SELECT * FROM unknown");
-            // const data = await db.execute(query);
+        // db errors are not logged in detail
+        // const query = sql.raw("SELECT * FROM unknown");
+        // const data = await db.execute(query);
 
-            // new Note
-            if (Note.id === 0) {
-                const result = await db
+        return await db.transaction(async (transaction) => {
+            // New Note
+            if (noteWithTags.id === 0) {
+                const newNoteInsertResult = await transaction
                     .insert(notes)
                     .values({
-                        text: Note.text,
+                        text: noteWithTags.text,
+                        creatorId: user.id,
                     })
-                    .returning({ insertedId: notes.id });
+                    .returning({ insertedNoteId: notes.id });
+
+                if (tagLabels && tagLabels.length > 0) {
+                    // Insert or retrieve existing tags
+                    const tagIds = await Promise.all(
+                        tagLabels.map(async (label) => {
+                            const existingTag = await transaction
+                                .select()
+                                .from(tags)
+                                .where(eq(tags.label, label));
+
+                            if (existingTag.length > 0)
+                                return existingTag[0]?.id;
+
+                            const newTag = await transaction
+                                .insert(tags)
+                                .values({
+                                    label: label,
+                                    creatorId: user.id,
+                                })
+                                .returning();
+                            return newTag[0].id;
+                        })
+                    );
+
+                    // Insert into the junction table
+                    // No need to delete previous junction entries because the note is newly created
+                    await transaction.insert(noteOnTags).values(
+                        tagIds.map((tagId) => ({
+                            noteId: newNoteInsertResult[0].insertedNoteId,
+                            tagId,
+                        }))
+                    );
+                }
 
                 return {
-                    message: `Note ID #${result[0].insertedId} created successfully`,
+                    message: `Note ID #${newNoteInsertResult[0].insertedNoteId} created successfully`,
                 };
             }
 
-            // existing Note
-            const result = await db
+            // Edit Note
+            await transaction
                 .update(notes)
                 .set({
-                    text: Note.text,
+                    text: noteWithTags.text,
                 })
-                .where(eq(notes.id, Note.id!))
-                .returning({ updatedId: notes.id });
+                .where(eq(notes.id, noteWithTags.id!));
+
+            //handle tags
+
+            if (tagLabels && tagLabels.length > 0) {
+                // Insert or retrieve existing tags
+                const tagIds = await Promise.all(
+                    tagLabels.map(async (label) => {
+                        const existingTag = await transaction
+                            .select()
+                            .from(tags)
+                            .where(eq(tags.label, label));
+
+                        if (existingTag.length > 0) return existingTag[0]?.id;
+
+                        const newTag = await transaction
+                            .insert(tags)
+                            .values({
+                                label: label,
+                                creatorId: user.id,
+                            })
+                            .returning();
+                        return newTag[0].id;
+                    })
+                );
+
+                // Delete entries connected to current note from junction table
+                await transaction
+                    .delete(noteOnTags)
+                    .where(eq(noteOnTags.noteId, noteWithTags.id!));
+
+                // Insert into the junction table
+                await transaction.insert(noteOnTags).values(
+                    tagIds.map((tagId) => ({
+                        noteId: noteWithTags.id!,
+                        tagId,
+                    }))
+                );
+            }
 
             return {
-                message: `Note ID #${result[0].updatedId} updated successfully`,
+                message: `Note ID #${noteWithTags.id!} updated successfully`,
             };
-        }
-    );
+        });
+    });
