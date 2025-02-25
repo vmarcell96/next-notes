@@ -1,14 +1,14 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 
 import {
-    insertNoteSchema,
-    type insertNoteSchemaType,
-    type selectNoteSchemaType,
+    insertNoteWithTagsSchema,
+    insertNoteWithTagsSchemaType,
+    selectNoteSchemaType,
 } from "@/zod-schemas/notes";
 
 import { TextAreaWithLabel } from "@/components/inputs/TextAreaWithLabel";
@@ -18,23 +18,24 @@ import { saveNoteAction } from "@/app/actions/saveNoteAction";
 import { useToast } from "@/hooks/use-toast";
 import { LoaderCircle } from "lucide-react";
 import { DisplayServerActionResponse } from "@/components/DisplayServerActionResponse";
+import CustomTagInput from "@/components/inputs/TagInput";
 
 type Props = {
     note?: selectNoteSchemaType;
+    tagLabels?: string[];
 };
 
-export default function NoteForm({ note }: Props) {
+export default function NoteForm({ note, tagLabels }: Props) {
     const { toast } = useToast();
 
-    const defaultValues: insertNoteSchemaType = {
-        id: note?.id ?? 0,
-        text: note?.text ?? "",
-    };
-
-    const form = useForm<insertNoteSchemaType>({
+    const form = useForm<insertNoteWithTagsSchemaType>({
         mode: "onBlur",
-        resolver: zodResolver(insertNoteSchema),
-        defaultValues,
+        resolver: zodResolver(insertNoteWithTagsSchema),
+        defaultValues: {
+            id: note?.id ?? 0,
+            text: note?.text ?? "",
+            tagLabels: tagLabels ?? [],
+        },
     });
 
     const {
@@ -62,8 +63,8 @@ export default function NoteForm({ note }: Props) {
         },
     });
 
-    async function submitForm(data: insertNoteSchemaType) {
-        // console.log(data);
+    async function submitForm(data: insertNoteWithTagsSchemaType) {
+        console.log(data);
 
         // for validation error testing
         // executeSave({ ...data, firstName: "", phone: "" });
@@ -86,7 +87,18 @@ export default function NoteForm({ note }: Props) {
                     className="flex flex-col md:flex-row gap-4 md:gap-8"
                 >
                     <div className="flex flex-col gap-4 w-full max-w-xs">
-                        <TextAreaWithLabel<insertNoteSchemaType>
+                        <Controller
+                            name="tagLabels"
+                            control={form.control}
+                            render={({ field }) => (
+                                <CustomTagInput
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                />
+                            )}
+                        />
+
+                        <TextAreaWithLabel<insertNoteWithTagsSchemaType>
                             fieldTitle="Notes"
                             nameInSchema="text"
                             className="h-40"
@@ -116,7 +128,11 @@ export default function NoteForm({ note }: Props) {
                                 variant="destructive"
                                 title="Reset"
                                 onClick={() => {
-                                    form.reset(defaultValues);
+                                    form.reset({
+                                        id: note?.id ?? 0,
+                                        text: note?.text ?? "",
+                                        tagLabels: tagLabels ?? [],
+                                    });
                                     resetSaveAction();
                                 }}
                             >
