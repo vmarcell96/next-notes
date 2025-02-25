@@ -1,5 +1,5 @@
 {
-  "id": "60920db5-f6f5-4a4d-bd12-241cebb4d433",
+  "id": "71b69a00-e9c6-41ec-9fce-e10f23358b12",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -124,7 +124,7 @@
           "name": "label",
           "type": "varchar",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "creator_id": {
           "name": "creator_id",
