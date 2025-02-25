@@ -2,7 +2,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { tags } from "@/db/schema";
 
 export const insertTagSchema = createInsertSchema(tags, {
-  label: (schema) => schema.min(1, "Label is required"),
+    label: (schema) => schema.min(1, "Label is required"),
 });
 
 export const selectTagSchema = createSelectSchema(tags);
